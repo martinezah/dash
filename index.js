@@ -6,6 +6,26 @@ app.http().io();
 app.use(express.cookieParser());
 app.use(express.session({secret: 'n53FXVBYULeuV26LkZpaSM4k'}));
 
+// Set up Kafka client
+var KAFKA_SERVER = 'k01.istresearch.com:2191';
+var KAFKA_CLIENT_GROUP = 'ist-dash';
+var KAFKA_TOPIC = 'memex.crawled_firehose'
+var kafka = require('kafka-node'),
+    client = new kafka.Client(KAFKA_SERVER),
+    producer = new kafka.Producer(client),
+    consumer = new kafka.Consumer(client, [{topic:KAFKA_TOPIC}], {
+        groupId: KAFKA_CLIENT_GROUP,
+        autoCommitIntervalMs: 500,
+    });
+
+producer.on('ready', function () {
+    console.log("ready");
+});
+
+consumer.on('message', function(data) {
+    console.log(data);
+});
+
 // Set up static routes
 var path = require('path');
 app.use('/', express.static(path.join(__dirname, 'static')));
@@ -36,5 +56,16 @@ app.io.route('remove', function(req) {
     });
 });
 
+app.io.route('crawl', function(req) {
+    req.session.save(function() {
+        req.io.emit('crawl-notimpl');
+    });
+});
+
+app.io.route('goodbye', function(req) {
+    delete req.session;
+    req.io.emit('goodbye-ok');
+});
+
 // Connect
-app.listen(8080);
+app.listen(8088);
