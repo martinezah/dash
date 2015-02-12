@@ -3,8 +3,9 @@ var app = angular.module('app', []);
 app.controller('crawler', ['$scope', '$timeout', function($scope, $timeout) { 
     window.$scope = $scope;
 
-    $scope.socket = io.connect();
     $scope.online = false;
+
+    $scope.socket = io.connect();
 
     $scope.socket.on('hello-ok', function(data) {
         $timeout(function() {
@@ -18,7 +19,8 @@ app.controller('crawler', ['$scope', '$timeout', function($scope, $timeout) {
     $scope.socket.on('remove-ok', function(data) {
     });
 
-    $scope.socket.on('crawl-notimpl', function(data) {
+    $scope.socket.on('crawl-ok', function(data) {
+        console.log(data);
         $timeout(function() {
             $scope.initCrawl();
         }, 0);
@@ -27,7 +29,7 @@ app.controller('crawler', ['$scope', '$timeout', function($scope, $timeout) {
     $scope.initCrawl = function() {
         $scope.newCrawl = {
             url: 'http://',
-            depth: 1,
+            depth: 0,
             appid: 'ist-dashboard',
             crawlid: uuid4(),
         };
@@ -53,7 +55,8 @@ app.controller('crawler', ['$scope', '$timeout', function($scope, $timeout) {
                 depth = 0;
             crawl.depth = depth;
             
-            $scope.socket.emit("crawl", crawl);
+            console.log(crawl);
+            $scope.socket.emit('crawl', crawl);
         }
     };
 
