@@ -1,6 +1,6 @@
 // Defaults
 
-var ZOOKEEPER_SERVER = '10.12.17.59:2181';
+var ZOOKEEPER_SERVER = 'z03.istresearch.com';
 var KAFKA_CLIENT_ID = 'ist-dash';
 var KAFKA_CLIENT_GROUP = 'ist-dash-dev'; // + Math.random().toString(36).substr(2,14);
 var KAFKA_INCOMING_TOPIC = 'memex.crawled_firehose';
@@ -26,6 +26,8 @@ var kafka = require('kafka-node'),
         groupId: KAFKA_CLIENT_GROUP, 
     });
 
+// Realtime routes
+
 producer.on('ready', function (data) {
     //console.log("producer: ready");
 });
@@ -42,18 +44,18 @@ consumer.on('message', function(data) {
     //console.log("consumer: message");
     try {
         var message = JSON.parse(data.value);
-        console.log(message.url);
+        console.log(message.crawlid + " " + message.url);
+        socket.to(message.crawlid).emit('message', message);
     } catch(err) {
-        //console.log(err);
+        console.log(err);
     }
 });
 
 // Set up realtime routes
 app.io.route('hello', function(req) {
-    console.log('hello');
+    //console.log('hello');
     var sessid = Math.random().toString(36).substr(2,14);
     req.session.name = sessid;
-    req.session.crawls = {};
     req.session.save(function() {
         req.io.emit('hello-ok');
     });
@@ -61,28 +63,31 @@ app.io.route('hello', function(req) {
 
 app.io.route('add', function(req) {
     var crawlid = req.data.crawlid;
-    req.session.crawls[crawlid] = 1;
+    req.io.join(crawlid);
     req.session.save(function() {
-        req.io.emit('add-ok', {crawls:req.session.crawls});
+        req.io.emit('add-ok', {crawlid:crawlid});
     });
 });
 
 app.io.route('remove', function(req) {
     var crawlid = req.data.crawlid;
-    delete req.session.crawls[crawlid];
+    req.io.leave(crawlid);
     req.session.save(function() {
-        req.io.emit('add-ok', {crawls:req.session.crawls});
+        req.io.emit('remove-ok', {crawlid:crawlid});
     });
 });
 
 app.io.route('crawl', function(req) {
-    console.log('crawl requested');
-    console.log(req.data);
+    //console.log('crawl requested');
     producer.send([{
         topic: KAFKA_OUTGOING_TOPIC,
         messages: [JSON.stringify(req.data)],
     }], function (err, data) {
-        req.io.emit('crawl-ok', data);
+        var crawlid = req.data.crawlid;
+        req.io.join(crawlid);
+        req.session.save(function() {
+            req.io.emit('crawl-ok', req.data);
+        });
     });
 });
 
@@ -91,11 +96,11 @@ app.io.route('goodbye', function(req) {
     req.io.emit('goodbye-ok');
 });
 
-// Set up static routes
+// Static routes
 var path = require('path');
 app.use('/', express.static(path.join(__dirname, 'static')));
 
-// catch shutdown
+// Shutdown
 process.on('SIGINT', function () {
   consumer.close(true, function(){
     client.close();

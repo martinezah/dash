@@ -14,16 +14,32 @@ app.controller('crawler', ['$scope', '$timeout', function($scope, $timeout) {
     });
 
     $scope.socket.on('add-ok', function(data) {
+        $timeout(function() {
+            if (data.crawlid) {
+                $scope.addCrawl(data);
+            }
+            $scope.watchCrawlId = '';
+        }, 0);
     });
 
     $scope.socket.on('remove-ok', function(data) {
+        $timeout(function() {
+            if (data.crawlid) {
+                $scope.removeCrawl(data);
+            }
+        }, 0);
     });
 
     $scope.socket.on('crawl-ok', function(data) {
-        console.log(data);
         $timeout(function() {
+            if (data.crawlid) {
+                $scope.addCrawl(data);
+            }
             $scope.initCrawl();
         }, 0);
+    });
+
+    $scope.socket.on('message', function(data) {
     });
 
     $scope.initCrawl = function() {
@@ -33,6 +49,41 @@ app.controller('crawler', ['$scope', '$timeout', function($scope, $timeout) {
             appid: 'ist-dashboard',
             crawlid: uuid4(),
         };
+    };
+
+    $scope.watchCrawl = function(crawlid) {
+        $scope.socket.emit('add', {crawlid:crawlid});
+    };
+
+    $scope.deleteCrawl = function(crawlid) {
+        $scope.socket.emit('remove', {crawlid:crawlid});
+    };
+
+    $scope.removeCrawl = function(data) {
+        var index = -1;
+        for (var ii = 0; ii < $scope.crawls.length; ii++) {
+            if ($scope.crawls[ii].id == data.crawlid) {
+                index = ii;
+            }
+        }
+        if (index >= 0) {
+            $scope.crawls.splice(index, 1);
+        }
+    };
+
+    $scope.addCrawl = function(data) {
+        for (var ii = 0; ii < $scope.crawls.length; ii++) {
+            if ($scope.crawls[ii].id == data.crawlid) {
+                return false;
+            }
+        }
+        $scope.crawls.push({
+            id: data.crawlid,
+            url: data.url,
+            depth: data.depth,
+            messages: [],
+        });
+        return true;
     };
 
     $scope.startCrawl = function(crawl) {
@@ -55,12 +106,12 @@ app.controller('crawler', ['$scope', '$timeout', function($scope, $timeout) {
                 depth = 0;
             crawl.depth = depth;
             
-            console.log(crawl);
             $scope.socket.emit('crawl', crawl);
         }
     };
 
     $scope.initCrawl();
+    $scope.crawls = [];
     $scope.socket.emit('hello');
 }]);
 
