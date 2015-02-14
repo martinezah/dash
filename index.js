@@ -1,12 +1,12 @@
 // Defaults
 
-var ZOOKEEPER_SERVER = 'z03.istresearch.com';
+var ZOOKEEPER_SERVER = 'localhost';
 var KAFKA_CLIENT_ID = 'ist-dash';
 var KAFKA_CLIENT_GROUP = 'ist-dash-dev'; // + Math.random().toString(36).substr(2,14);
 var KAFKA_INCOMING_TOPIC = 'memex.crawled_firehose';
 var KAFKA_OUTGOING_TOPIC = 'memex.incoming_urls';
 
-var APP_PORT = 8081;
+var APP_PORT = 8088;
 var APP_SECRET = 'n53FXVBYULeuV26LkZpaSM4k';
 
 // Bootstrap app
@@ -45,7 +45,7 @@ consumer.on('message', function(data) {
     try {
         var message = JSON.parse(data.value);
         console.log(message.crawlid + " " + message.url);
-        socket.to(message.crawlid).emit('message', message);
+        app.io.room(message.crawlid).broadcast('message', message);
     } catch(err) {
         console.log(err);
     }
@@ -78,11 +78,12 @@ app.io.route('remove', function(req) {
 });
 
 app.io.route('crawl', function(req) {
-    //console.log('crawl requested');
+    console.log('crawl requested');
     producer.send([{
         topic: KAFKA_OUTGOING_TOPIC,
         messages: [JSON.stringify(req.data)],
     }], function (err, data) {
+        //console.log(data);
         var crawlid = req.data.crawlid;
         req.io.join(crawlid);
         req.session.save(function() {

@@ -1,4 +1,4 @@
-var app = angular.module('app', []);
+var app = angular.module('app', ['angularMoment']);
 
 app.controller('crawler', ['$scope', '$timeout', function($scope, $timeout) { 
     window.$scope = $scope;
@@ -40,6 +40,14 @@ app.controller('crawler', ['$scope', '$timeout', function($scope, $timeout) {
     });
 
     $scope.socket.on('message', function(data) {
+        $timeout(function() {
+            for (var ii = 0; ii < $scope.crawls.length; ii++) {
+                if ($scope.crawls[ii].id == data.crawlid) {
+                    data.timestamp = new Date(data.ts);
+                    $scope.crawls[ii].messages.push(data);
+                }
+            }
+        }, 0);
     });
 
     $scope.initCrawl = function() {

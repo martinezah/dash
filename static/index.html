@@ -118,10 +118,18 @@
         <div class="col-md-12">
           <h2>{{crawl.url || crawl.id}}</h2>
           <h4 ng-show="crawl.url">Crawl ID: {{crawl.id}}</h4>
-          <p><a ng-click="deleteCrawl(crawl.id)">Remove</a></p>
-          <div ng-repeat="message in crawl.messages">
-            {{message.url}}
-          </div>
+          <p><a ng-click="deleteCrawl(crawl.id)">Remove Crawl</a></p>
+          <table class="table" ng-show="crawl.messages.length">
+          <tr>
+            <th>URL</th><th>Time</th><th>Status</th><th></th>
+          </tr>
+          <tr ng-repeat="message in crawl.messages|orderBy:'-timestamp'">
+            <td><span><a ng-href="{{message.url}}" target="_blank">{{message.url}}</a></span></td>
+            <td><span am-time-ago="message.timestamp"></span></td>
+            <td><span>{{message.status_code}}</span></td>
+            <td><span></span></td>
+          </tr>
+          </table>
         </div>
       </div>
 
@@ -137,6 +145,8 @@
 
         <!-- <script src="js/vendor/bootstrap.min.js"></script> -->
         <script src="js/angularui/ui-bootstrap-custom-0.12.0.js"></script> 
+        <script src="js/vendor/moment.min.js"></script> 
+        <script src="js/vendor/angular-moment.min.js"></script> 
 
         <script src="/socket.io/socket.io.js"></script>
         <script src="js/utils.js"></script>
