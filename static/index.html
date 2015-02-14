@@ -126,7 +126,7 @@
         <hr>
         <div class="col-md-12">
           <h2>{{crawl.url || crawl.crawlid}}</h2>
-          <h4 ng-show="crawl.url">Crawl ID: {{crawl.crawlid}}</h4>
+          <h4 ng-show="crawl.url && !crawl.hide">Crawl ID: {{crawl.crawlid}}</h4>
           <p class="pull-right"> 
               <a ng-click="crawl.hide = !crawl.hide">
                 <span ng-show="crawl.hide" class="glyphicon glyphicon-chevron-down"></span>
