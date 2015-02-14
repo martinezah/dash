@@ -1,14 +1,22 @@
 {
   "name": "dash",
   "version": "0.0.1",
-  "description": "",
+  "description": "IST Crawler Dashboard",
   "main": "index.js",
   "scripts": {
-    "start": "nodemon index.js"
+    "start": "nodemon --ignore static index.js"
   },
   "author": "",
   "license": "",
+  "repository" : { 
+    "type" : "git",
+    "url" : "http://github.com/martinezah/dash.git"
+  },
   "dependencies": {
-    "express.io": "~1.1.13"
+    "connect-redis": "^2.2.0",
+    "express-session": "^1.10.2",
+    "express.io": "~1.1.13",
+    "kafka-node": "^0.2.20",
+    "redis": "^0.12.1"
   }
 }

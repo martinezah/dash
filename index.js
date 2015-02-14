@@ -11,12 +11,28 @@ var APP_SECRET = 'n53FXVBYULeuV26LkZpaSM4k';
 
 // Bootstrap app
 var express = require('express.io');
+var session = require('express-session');
+var redis = require('redis');
+var RedisStore = require('connect-redis')(session);
 var app = express();
 app.http().io();
 
 // Set up sessions
 app.use(express.cookieParser());
-app.use(express.session({secret: APP_SECRET}));
+app.use(express.session({
+    secret: APP_SECRET,
+    store: new RedisStore({
+        client: redis.createClient()  
+    }) 
+}))
+
+/*
+app.io.set('store', new express.io.RedisStore({
+    redisPub: redis.createClient(),
+    redisSub: redis.createClient(),
+    redisClient: redis.createClient(),
+}))
+*/
 
 // Set up Kafka client
 var kafka = require('kafka-node'),
@@ -54,24 +70,55 @@ consumer.on('message', function(data) {
 // Set up realtime routes
 app.io.route('hello', function(req) {
     //console.log('hello');
-    var sessid = Math.random().toString(36).substr(2,14);
-    req.session.name = sessid;
+    if (!req.session.name) {
+        var sessid = Math.random().toString(36).substr(2,14);
+        req.session.name = sessid;
+    }
+    if (!req.session.crawls) {
+        req.session.crawls = [];
+    }
+    crawls = []
+    for (var ii = 0; ii < req.session.crawls.length; ii++) {
+        try {
+            req.io.join(req.session.crawls[ii].crawlid);    
+            crawls.push(req.session.crawls[ii])
+        } catch (err) { }
+    }
+    req.session.crawls = crawls;
     req.session.save(function() {
-        req.io.emit('hello-ok');
+        req.io.emit('hello-ok', {crawls:req.session.crawls});
     });
 });
 
 app.io.route('add', function(req) {
-    var crawlid = req.data.crawlid;
-    req.io.join(crawlid);
+    var crawl = req.data;
+    var exists = false;
+    for (var ii = 0; ii < req.session.crawls.length; ii++) {
+        try {
+            if (req.session.crawls[ii].crawlid == crawl.crawlid)
+                exists = true;
+        } catch (err) { }
+    }
+    if (!exists) {
+        req.io.join(crawl.crawlid);
+        req.session.crawls.push(crawl);
+    }
     req.session.save(function() {
-        req.io.emit('add-ok', {crawlid:crawlid});
+        req.io.emit('add-ok', crawl);
     });
 });
 
 app.io.route('remove', function(req) {
     var crawlid = req.data.crawlid;
-    req.io.leave(crawlid);
+    for (var ii = 0; ii < req.session.crawls.length; ii++) {
+        try {
+            if (req.session.crawls[ii].crawlid == crawlid) {
+                req.io.leave(crawlid);
+                req.session.crawls.splice(ii,1);
+                break;
+            }
+        } catch (err) { }
+    }
     req.session.save(function() {
         req.io.emit('remove-ok', {crawlid:crawlid});
     });
@@ -84,10 +131,18 @@ app.io.route('crawl', function(req) {
         messages: [JSON.stringify(req.data)],
     }], function (err, data) {
         //console.log(data);
-        var crawlid = req.data.crawlid;
-        req.io.join(crawlid);
+        var crawl = req.data;
+        var exists = false;
+        for (var ii = 0; ii < req.session.crawls.length; ii++) {
+            if (req.session.crawls[ii].crawlid == crawl.crawlid)
+                exists = true;
+        }
+        if (!exists) {
+            req.io.join(crawl.crawlid);
+            req.session.crawls.push(crawl);
+        }
         req.session.save(function() {
-            req.io.emit('crawl-ok', req.data);
+            req.io.emit('crawl-ok', crawl);
         });
     });
 });

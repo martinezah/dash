@@ -9,6 +9,8 @@ app.controller('crawler', ['$scope', '$timeout', function($scope, $timeout) {
 
     $scope.socket.on('hello-ok', function(data) {
         $timeout(function() {
+            if (data.crawls)
+                $scope.crawls = data.crawls;
             $scope.online = true;
         }, 0);
     });
@@ -42,7 +44,7 @@ app.controller('crawler', ['$scope', '$timeout', function($scope, $timeout) {
     $scope.socket.on('message', function(data) {
         $timeout(function() {
             for (var ii = 0; ii < $scope.crawls.length; ii++) {
-                if ($scope.crawls[ii].id == data.crawlid) {
+                if ($scope.crawls[ii].crawlid == data.crawlid) {
                     data.timestamp = new Date(data.ts);
                     $scope.crawls[ii].messages.push(data);
                 }
@@ -60,7 +62,7 @@ app.controller('crawler', ['$scope', '$timeout', function($scope, $timeout) {
     };
 
     $scope.watchCrawl = function(crawlid) {
-        $scope.socket.emit('add', {crawlid:crawlid});
+        $scope.socket.emit('add', {crawlid:crawlid, messages: []});
     };
 
     $scope.deleteCrawl = function(crawlid) {
@@ -70,7 +72,7 @@ app.controller('crawler', ['$scope', '$timeout', function($scope, $timeout) {
     $scope.removeCrawl = function(data) {
         var index = -1;
         for (var ii = 0; ii < $scope.crawls.length; ii++) {
-            if ($scope.crawls[ii].id == data.crawlid) {
+            if ($scope.crawls[ii].crawlid == data.crawlid) {
                 index = ii;
             }
         }
@@ -79,18 +81,13 @@ app.controller('crawler', ['$scope', '$timeout', function($scope, $timeout) {
         }
     };
 
-    $scope.addCrawl = function(data) {
+    $scope.addCrawl = function(crawl) {
         for (var ii = 0; ii < $scope.crawls.length; ii++) {
-            if ($scope.crawls[ii].id == data.crawlid) {
+            if ($scope.crawls[ii].crawlid == crawl.crawlid) {
                 return false;
             }
         }
-        $scope.crawls.push({
-            id: data.crawlid,
-            url: data.url,
-            depth: data.depth,
-            messages: [],
-        });
+        $scope.crawls.push(crawl);
         return true;
     };
 
@@ -113,6 +110,7 @@ app.controller('crawler', ['$scope', '$timeout', function($scope, $timeout) {
             if (!depth) 
                 depth = 0;
             crawl.depth = depth;
+            crawl.messages = [];
             
             $scope.socket.emit('crawl', crawl);
         }

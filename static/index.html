@@ -53,15 +53,20 @@
 
     <div class="add-crawl jumbotron">
       <div class="container">
-        <p class="pull-right"> 
-            <a ng-click="hideTop = !hideTop">
+          <div class="row">
+            <h2 class="pull-left">Manage Crawls</h2>
+            <p class="pull-right"> 
+              <a ng-click="hideTop = !hideTop">
                 <span ng-show="hideTop" class="glyphicon glyphicon-chevron-down"></span>
                 <span ng-hide="hideTop" class="glyphicon glyphicon-chevron-up"></span>
-            </a>
-        </p>
-        <h2>Start a Crawl</h2>
+              </a>
+            </p>
+          </div>
+      </div>  
+      <div class="container" ng-hide="hideTop">
         <form>
-        <div class="row" ng-hide="hideTop">
+        <div class="row">
+            <h3>Start a New Crawl</h3>
             <div class="col-xs-6">
                 <div id="newCrawlUrl" class="form-group">
                     <label>URL</label>
@@ -81,7 +86,7 @@
                 </div>
             </div>
         </div>
-        <div class="row" ng-hide="hideTop">
+        <div class="row">
             <div class="col-xs-2">
                 <div class="form-group">
                     <input type="submit" class="btn btn-primary" ng-click="startCrawl(newCrawl)" value="Start Crawl &raquo;">
@@ -92,9 +97,9 @@
       </div>
     </div>
     <div class="container" ng-hide="hideTop">
-      <h2>Watch an Existing Crawl</h2>
       <form>
       <div class="row">
+          <h3>Watch an Existing Crawl</h3>
           <div class="col-xs-5">
               <div id="newCrawlCrawlid" class="form-group">
                   <label>Crawl ID</label>
@@ -112,14 +117,24 @@
       </form>
     </div>
 
-    <div class="container">
+    <div class="container ng-cloak" ng-show="crawls.length">
+      <hr>
+      <div class="row">
+          <h2 class="pull-left">Active Crawls</h2>
+      </div>
       <div class="row" ng-repeat="crawl in crawls">
         <hr>
         <div class="col-md-12">
-          <h2>{{crawl.url || crawl.id}}</h2>
-          <h4 ng-show="crawl.url">Crawl ID: {{crawl.id}}</h4>
-          <p><a ng-click="deleteCrawl(crawl.id)">Remove Crawl</a></p>
-          <table class="table" ng-show="crawl.messages.length">
+          <h2>{{crawl.url || crawl.crawlid}}</h2>
+          <h4 ng-show="crawl.url">Crawl ID: {{crawl.crawlid}}</h4>
+          <p class="pull-right"> 
+              <a ng-click="crawl.hide = !crawl.hide">
+                <span ng-show="crawl.hide" class="glyphicon glyphicon-chevron-down"></span>
+                <span ng-hide="crawl.hide" class="glyphicon glyphicon-chevron-up"></span>
+              </a>
+          </p>
+          <p><a ng-click="deleteCrawl(crawl.crawlid)" ng-show="!crawl.hide">Remove Crawl</a></p>
+          <table class="table" ng-show="crawl.messages.length && !crawl.hide">
           <tr>
             <th>URL</th><th>Time</th><th>Status</th><th></th>
           </tr>
