@@ -100,17 +100,23 @@
       <form>
       <div class="row">
           <h3>Watch an Existing Crawl</h3>
+          <div class="col-xs-3">
+              <div id="watchCrawlAppid" class="form-group">
+                  <label>App ID</label>
+                  <input type="text" class="form-control" ng-model="watch.appid" placeholder="">
+              </div>
+          </div>
           <div class="col-xs-5">
-              <div id="newCrawlCrawlid" class="form-group">
+              <div id="watchCrawlCrawlid" class="form-group">
                   <label>Crawl ID</label>
-                  <input type="text" class="form-control" ng-model="watchCrawlId" placeholder="">
+                  <input type="text" class="form-control" ng-model="watch.crawlid" placeholder="">
               </div>
           </div>
       </div>
       <div class="row">
           <div class="col-xs-2">
               <div class="form-group">
-                  <input type="submit" class="btn btn-primary" ng-click="watchCrawl(watchCrawlId)" value="Watch Crawl &raquo;">
+                  <input type="submit" class="btn btn-primary" ng-click="watchCrawl(watch)" value="Watch Crawl &raquo;">
               </div>
           </div>
       </div>
@@ -122,11 +128,11 @@
       <div class="row">
           <h2 class="pull-left">Active Crawls</h2>
       </div>
-      <div class="row" ng-repeat="crawl in crawls">
+      <div class="row" ng-repeat="crawl in crawls|orderBy:-'$index'">
         <hr>
         <div class="col-md-12">
-          <h2>{{crawl.url || crawl.crawlid}}</h2>
-          <h4 ng-show="crawl.url && !crawl.hide">Crawl ID: {{crawl.crawlid}}</h4>
+          <h2>{{crawl.url || (crawl.appid + ":" + crawl.crawlid)}}</h2>
+          <h4 ng-show="crawl.url && !crawl.hide">{{crawl.appid}}:{{crawl.crawlid}}</h4>
           <p class="pull-right"> 
               <a ng-click="crawl.hide = !crawl.hide">
                 <span ng-show="crawl.hide" class="glyphicon glyphicon-chevron-down"></span>

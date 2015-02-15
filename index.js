@@ -1,15 +1,23 @@
 // Defaults
 
-var ZOOKEEPER_SERVER = 'localhost';
-var KAFKA_CLIENT_ID = 'ist-dash';
-var KAFKA_CLIENT_GROUP = 'ist-dash-dev'; // + Math.random().toString(36).substr(2,14);
-var KAFKA_INCOMING_TOPIC = 'memex.crawled_firehose';
-var KAFKA_OUTGOING_TOPIC = 'memex.incoming_urls';
+var APP_SECRET = process.env['APP_SECRET'] || 'n53FXVBYULeuV26LkZpaSM4k';
+var APP_PORT = parseInt(process.env['APP_PORT']) || 8088;
 
-var APP_PORT = 8088;
-var APP_SECRET = 'n53FXVBYULeuV26LkZpaSM4k';
+var ZOOKEEPER_SERVER = process.env['ZOOKEEPER_SERVER'] || 'localhost';
+var KAFKA_CLIENT_ID = process.env['KAFKA_CLIENT_ID'] || 'ist-dash';
+var KAFKA_CLIENT_GROUP = process.env['KAFKA_CLIENT_GROUP'] || 'ist-dash-dev'; 
+var KAFKA_INCOMING_TOPIC = process.env['KAFKA_INCOMING_TOPIC'] || 'memex.crawled_firehose';
+var KAFKA_OUTGOING_TOPIC = process.env['KAFKA_OUTGOING_TOPIC'] || 'memex.incoming_urls';
+var CRAWLER_APPID = process.env['CRAWLER_APPID'] || 'ist-dash';
 
-// Bootstrap app
+var LOCAL_TTL = parseInt(process.env['LOCAL_TTL']) || (2 * 24 * 60 * 60);
+var OTHER_TTL = parseInt(process.env['OTHER_TTL']) || (2 * 60 * 60);
+
+var LOCAL_QUEUE_SIZE = parseInt(process.env['LOCAL_QUEUE_SIZE']) || 1000;
+var OTHER_QUEUE_SIZE = parseInt(process.env['OTHER_QUEUE_SIZE']) || 100;
+
+// Bootstrap App
+
 var express = require('express.io');
 var session = require('express-session');
 var redis = require('redis');
@@ -17,7 +25,8 @@ var RedisStore = require('connect-redis')(session);
 var app = express();
 app.http().io();
 
-// Set up sessions
+// Session Config
+
 app.use(express.cookieParser());
 app.use(express.session({
     secret: APP_SECRET,
@@ -26,15 +35,12 @@ app.use(express.session({
     }) 
 }))
 
-/*
-app.io.set('store', new express.io.RedisStore({
-    redisPub: redis.createClient(),
-    redisSub: redis.createClient(),
-    redisClient: redis.createClient(),
-}))
-*/
+// Redis Client
 
-// Set up Kafka client
+app.locals.redis = redis.createClient();
+
+// Kafka Client
+
 var kafka = require('kafka-node'),
     client = new kafka.Client(ZOOKEEPER_SERVER, KAFKA_CLIENT_ID, {});
     producer = new kafka.HighLevelProducer(client),
@@ -42,7 +48,7 @@ var kafka = require('kafka-node'),
         groupId: KAFKA_CLIENT_GROUP, 
     });
 
-// Realtime routes
+// Kafka Events
 
 producer.on('ready', function (data) {
     //console.log("producer: ready");
@@ -60,14 +66,23 @@ consumer.on('message', function(data) {
     //console.log("consumer: message");
     try {
         var message = JSON.parse(data.value);
-        console.log(message.crawlid + " " + message.url);
+        console.log(message.appid + ":" + message.crawlid + " " + message.url);
+        message.body = null;
+        delete message.body;
+        var is_local = message.appid == CRAWLER_APPID;
+        var queue = message.appid + ":" + message.crawlid;
+        var msg = JSON.stringify(message);
+        app.locals.redis.lpush(queue, msg);
+        app.locals.redis.ltrim(queue, 0, is_local ? LOCAL_QUEUE_SIZE : OTHER_QUEUE_SIZE);
+        app.locals.redis.expire(queue, is_local ? LOCAL_TTL : OTHER_TTL);
         app.io.room(message.crawlid).broadcast('message', message);
     } catch(err) {
         console.log(err);
     }
 });
 
-// Set up realtime routes
+// Realtime Routes
+
 app.io.route('hello', function(req) {
     //console.log('hello');
     if (!req.session.name) {
@@ -80,14 +95,36 @@ app.io.route('hello', function(req) {
     crawls = []
     for (var ii = 0; ii < req.session.crawls.length; ii++) {
         try {
-            req.io.join(req.session.crawls[ii].crawlid);    
-            crawls.push(req.session.crawls[ii])
+            var crawl = req.session.crawls[ii];
+            req.io.join(crawl.crawlid);    
+            try {
+                if (!crawl.messages || !crawl.messages.length)
+                    crawl.messages = [];
+            } catch (err) { }
+            crawls.push(crawl)
         } catch (err) { }
     }
     req.session.crawls = crawls;
     req.session.save(function() {
-        req.io.emit('hello-ok', {crawls:req.session.crawls});
+        req.io.emit('hello-ok', {crawls:req.session.crawls, appid: CRAWLER_APPID});
     });
+});
+
+app.io.route('load', function(req) {
+    for (var ii = 0; ii < req.session.crawls.length; ii++) {
+        try {
+            var crawl = req.session.crawls[ii];
+            try {
+                var queue = crawl.appid + ":" + crawl.crawlid;
+                var messages = app.locals.redis.lrange(queue, 0, -1, function(err, items) {
+                    items.forEach(function (msg, i) {
+                        var message = JSON.parse(msg);
+                        req.io.emit('message', message);
+                    });
+                });
+            } catch (err) { }
+        } catch (err) { }
+    }
 });
 
 app.io.route('add', function(req) {
@@ -125,7 +162,7 @@ app.io.route('remove', function(req) {
 });
 
 app.io.route('crawl', function(req) {
-    console.log('crawl requested');
+    //console.log('crawl requested');
     producer.send([{
         topic: KAFKA_OUTGOING_TOPIC,
         messages: [JSON.stringify(req.data)],
@@ -152,18 +189,22 @@ app.io.route('goodbye', function(req) {
     req.io.emit('goodbye-ok');
 });
 
-// Static routes
+// Static Routes
+
 var path = require('path');
 app.use('/', express.static(path.join(__dirname, 'static')));
 
-// Shutdown
+// Shutdown Cleanup
+
 process.on('SIGINT', function () {
+  app.locals.redis.quit();
   consumer.close(true, function(){
     client.close();
   });
 });
 
 // Connect
+
 app.listen(APP_PORT);
 console.log("Listening on " + APP_PORT);
 

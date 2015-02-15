@@ -11,7 +11,10 @@ app.controller('crawler', ['$scope', '$timeout', function($scope, $timeout) {
         $timeout(function() {
             if (data.crawls)
                 $scope.crawls = data.crawls;
+            if (data.appid)
+                $scope.appid = data.appid;
             $scope.online = true;
+            $scope.socket.emit('load');
         }, 0);
     });
 
@@ -56,13 +59,15 @@ app.controller('crawler', ['$scope', '$timeout', function($scope, $timeout) {
         $scope.newCrawl = {
             url: 'http://',
             depth: 0,
-            appid: 'ist-dashboard',
             crawlid: uuid4(),
         };
     };
 
-    $scope.watchCrawl = function(crawlid) {
-        $scope.socket.emit('add', {crawlid:crawlid, messages: []});
+    $scope.watchCrawl = function(crawl) {
+        if (!crawl.appid && !crawl.crawlid)
+            return;
+        crawl.messages = [];
+        $scope.socket.emit('add', crawl);
     };
 
     $scope.deleteCrawl = function(crawlid) {
@@ -104,12 +109,14 @@ app.controller('crawler', ['$scope', '$timeout', function($scope, $timeout) {
             //sanitize crawlid
             if (!crawl.crawlid) 
                 crawl.crawlid = uuid4();
-
+            
             //sanitize depth
             var depth = parseInt(crawl.depth);
             if (!depth) 
                 depth = 0;
             crawl.depth = depth;
+
+            crawl.appid = $scope.appid;            
             crawl.messages = [];
             
             $scope.socket.emit('crawl', crawl);
