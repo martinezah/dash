@@ -8,14 +8,15 @@
   },
   "author": "",
   "license": "",
-  "repository" : { 
-    "type" : "git",
-    "url" : "http://github.com/martinezah/dash.git"
+  "repository": {
+    "type": "git",
+    "url": "http://github.com/martinezah/dash.git"
   },
   "dependencies": {
     "connect-redis": "^2.2.0",
     "express-session": "^1.10.2",
     "express.io": "~1.1.13",
+    "hiredis": "^0.2.0",
     "kafka-node": "^0.2.20",
     "redis": "^0.12.1"
   }

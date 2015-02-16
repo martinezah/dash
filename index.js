@@ -1,14 +1,18 @@
 // Defaults
 
-var APP_SECRET = process.env['APP_SECRET'] || 'n53FXVBYULeuV26LkZpaSM4k';
+var APP_ID = process.env['APP_ID'] || 'dash';
+var APP_SECRET = process.env['APP_SECRET'] || 'CHANGE_ME';
 var APP_PORT = parseInt(process.env['APP_PORT']) || 8088;
 
+var KAFKA_CLIENT_ID = process.env['KAFKA_CLIENT_ID'] || 'dash';
+var KAFKA_CLIENT_GROUP = process.env['KAFKA_CLIENT_GROUP'] || 'dash'; 
+var KAFKA_INCOMING_TOPIC = process.env['KAFKA_INCOMING_TOPIC'] || 'crawled';
+var KAFKA_OUTGOING_TOPIC = process.env['KAFKA_OUTGOING_TOPIC'] || 'urls';
+
 var ZOOKEEPER_SERVER = process.env['ZOOKEEPER_SERVER'] || 'localhost';
-var KAFKA_CLIENT_ID = process.env['KAFKA_CLIENT_ID'] || 'ist-dash';
-var KAFKA_CLIENT_GROUP = process.env['KAFKA_CLIENT_GROUP'] || 'ist-dash-dev'; 
-var KAFKA_INCOMING_TOPIC = process.env['KAFKA_INCOMING_TOPIC'] || 'memex.crawled_firehose';
-var KAFKA_OUTGOING_TOPIC = process.env['KAFKA_OUTGOING_TOPIC'] || 'memex.incoming_urls';
-var CRAWLER_APPID = process.env['CRAWLER_APPID'] || 'ist-dash';
+
+var REDIS_SERVER = process.env['REDIS_SERVER'] || 'localhost';
+var REDIS_PORT = parseInt(process.env['REDIS_PORT']) || 6379;
 
 var LOCAL_TTL = parseInt(process.env['LOCAL_TTL']) || (2 * 24 * 60 * 60);
 var OTHER_TTL = parseInt(process.env['OTHER_TTL']) || (2 * 60 * 60);
@@ -31,13 +35,13 @@ app.use(express.cookieParser());
 app.use(express.session({
     secret: APP_SECRET,
     store: new RedisStore({
-        client: redis.createClient()  
+        client: redis.createClient(REDIS_PORT, REDIS_SERVER)  
     }) 
 }))
 
 // Redis Client
 
-app.locals.redis = redis.createClient();
+app.locals.redis = redis.createClient(REDIS_PORT, REDIS_SERVER);
 
 // Kafka Client
 
@@ -69,7 +73,7 @@ consumer.on('message', function(data) {
         console.log(message.appid + ":" + message.crawlid + " " + message.url);
         message.body = null;
         delete message.body;
-        var is_local = message.appid == CRAWLER_APPID;
+        var is_local = message.appid == APP_ID;
         var queue = message.appid + ":" + message.crawlid;
         var msg = JSON.stringify(message);
         app.locals.redis.lpush(queue, msg);
@@ -106,7 +110,7 @@ app.io.route('hello', function(req) {
     }
     req.session.crawls = crawls;
     req.session.save(function() {
-        req.io.emit('hello-ok', {crawls:req.session.crawls, appid: CRAWLER_APPID});
+        req.io.emit('hello-ok', {crawls:req.session.crawls, appid: APP_ID});
     });
 });
 
