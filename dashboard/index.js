@@ -166,6 +166,13 @@ app.io.route('goodbye', function(req) {
     req.io.emit('goodbye-ok');
 });
 
+// Redis Listener
+
+app.locals.redis.on('message', function(channel, message) {
+    console.log('redis message: ' + channel + ' ' + message)
+    app.io.room(channel).broadcast('message', message);
+});
+
 // Static Routes
 
 var path = require('path');
