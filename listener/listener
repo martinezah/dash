@@ -1,0 +1,60 @@
+#!/usr/bin/env python
+from kafka.client import KafkaClient
+from kafka.common import OffsetOutOfRangeError
+from kafka.consumer import SimpleConsumer
+
+import redis
+import time
+import json
+import sys
+
+from docopt import docopt
+
+REDIS_HOST = "localhost"
+KAFKA_HOST = "localhost"
+KAFKA_TOPIC = "crawled"
+CLIENT_GROUP = "dash-watcher"
+
+def watch(redis_host, kafka_host, topic, group):
+    redis_conn = redis.Redis(redis_host)
+    redis_conn.info()
+
+    kafka_conn = KafkaClient(kafka_host)
+    kafka_conn.ensure_topic_exists(topic)
+    consumer = SimpleConsumer(kafka_conn,
+                              group,
+                              topic,
+                              auto_commit=True,
+                              iter_timeout=1.0)
+
+    while True:
+          try:
+            for message in consumer.get_messages():
+                if message is None:
+                    break
+                try:
+                    d = json.loads(message.message.value)
+                    print json.dumps(d)
+                    
+                except ValueError:
+                    print "json failed to parse"
+          except OffsetOutOfRangeError:
+            consumer.seek(0,0)
+            time.sleep(1)
+
+
+def main():
+    '''Usage:
+        listener [--topic=<topic>] [--group=<group>] [--kafka=<kafka>] [--redis=<redis>] 
+    '''
+    
+    args = docopt(main.__doc__)
+    redis = args["--redis"] or REDIS_HOST
+    kafka = args["--kafka"] or KAFKA_HOST
+    topic = args["--topic"] or KAFKA_TOPIC
+    group = args["--group"] or CLIENT_GROUP
+    
+    watch(redis, kafka, topic, group)
+
+if __name__ == "__main__":
+    sys.exit(main())

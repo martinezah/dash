@@ -5,8 +5,6 @@ var APP_SECRET = process.env['APP_SECRET'] || 'CHANGE_ME';
 var APP_PORT = parseInt(process.env['APP_PORT']) || 8088;
 
 var KAFKA_CLIENT_ID = process.env['KAFKA_CLIENT_ID'] || 'dash';
-var KAFKA_CLIENT_GROUP = process.env['KAFKA_CLIENT_GROUP'] || 'dash'; 
-var KAFKA_INCOMING_TOPIC = process.env['KAFKA_INCOMING_TOPIC'] || 'crawled';
 var KAFKA_OUTGOING_TOPIC = process.env['KAFKA_OUTGOING_TOPIC'] || 'urls';
 
 var ZOOKEEPER_SERVER = process.env['ZOOKEEPER_SERVER'] || 'localhost';
@@ -48,43 +46,11 @@ app.locals.redis = redis.createClient(REDIS_PORT, REDIS_SERVER);
 var kafka = require('kafka-node'),
     client = new kafka.Client(ZOOKEEPER_SERVER, KAFKA_CLIENT_ID, {});
     producer = new kafka.HighLevelProducer(client),
-    consumer = new kafka.HighLevelConsumer(client, [{topic:KAFKA_INCOMING_TOPIC}], { 
-        groupId: KAFKA_CLIENT_GROUP, 
-    });
 
 // Kafka Events
 
 producer.on('ready', function (data) {
     console.log("producer: ready");
-});
-
-consumer.on('offsetOutOfRange', function (data) {
-    console.log("consumer: offsetOutOfRange");
-    console.log(data);
-});
-
-consumer.on('error', function (data) {
-    console.log("consumer: error");
-    console.log(data);
-});
-
-consumer.on('message', function(data) {
-    //console.log("consumer: message");
-    try {
-        var message = JSON.parse(data.value);
-        message.body = null;
-        delete message.body;
-        var is_local = message.appid == APP_ID;
-        var queue = message.appid + ":" + message.crawlid;
-        var msg = JSON.stringify(message);
-        //console.log(message.appid + ":" + message.crawlid + " " + message.url);
-        app.locals.redis.lpush(queue, msg);
-        app.locals.redis.ltrim(queue, 0, is_local ? LOCAL_QUEUE_SIZE : OTHER_QUEUE_SIZE);
-        app.locals.redis.expire(queue, is_local ? LOCAL_TTL : OTHER_TTL);
-        app.io.room(message.crawlid).broadcast('message', message);
-    } catch(err) {
-        console.log(err);
-    }
 });
 
 // Realtime Routes
@@ -145,6 +111,7 @@ app.io.route('add', function(req) {
     if (!exists) {
         req.io.join(crawl.crawlid);
         req.session.crawls.push(crawl);
+        app.locals.redis.subscribe(crawl.crawlid);
     }
     req.session.save(function() {
         req.io.emit('add-ok', crawl);
@@ -157,6 +124,7 @@ app.io.route('remove', function(req) {
         try {
             if (req.session.crawls[ii].crawlid == crawlid) {
                 req.io.leave(crawlid);
+                app.locals.redis.unsubscribe(crawl.crawlid);
                 req.session.crawls.splice(ii,1);
                 break;
             }
@@ -185,6 +153,7 @@ app.io.route('crawl', function(req) {
         if (!exists) {
             req.io.join(crawl.crawlid);
             req.session.crawls.push(crawl);
+            app.locals.redis.subscribe(crawl.crawlid);
         }
         req.session.save(function() {
             req.io.emit('crawl-ok', crawl);
