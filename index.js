@@ -55,27 +55,29 @@ var kafka = require('kafka-node'),
 // Kafka Events
 
 producer.on('ready', function (data) {
-    //console.log("producer: ready");
+    console.log("producer: ready");
 });
 
 consumer.on('offsetOutOfRange', function (data) {
-    //console.log("consumer: offsetOutOfRange");
+    console.log("consumer: offsetOutOfRange");
+    console.log(data);
 });
 
 consumer.on('error', function (data) {
-    //console.log("consumer: error");
+    console.log("consumer: error");
+    console.log(data);
 });
 
 consumer.on('message', function(data) {
     //console.log("consumer: message");
     try {
         var message = JSON.parse(data.value);
-        console.log(message.appid + ":" + message.crawlid + " " + message.url);
         message.body = null;
         delete message.body;
         var is_local = message.appid == APP_ID;
         var queue = message.appid + ":" + message.crawlid;
         var msg = JSON.stringify(message);
+        //console.log(message.appid + ":" + message.crawlid + " " + message.url);
         app.locals.redis.lpush(queue, msg);
         app.locals.redis.ltrim(queue, 0, is_local ? LOCAL_QUEUE_SIZE : OTHER_QUEUE_SIZE);
         app.locals.redis.expire(queue, is_local ? LOCAL_TTL : OTHER_TTL);
@@ -166,12 +168,14 @@ app.io.route('remove', function(req) {
 });
 
 app.io.route('crawl', function(req) {
-    //console.log('crawl requested');
+    console.log('crawl requested');
+    var crawldata = req.data;
+    delete crawldata.messages;
     producer.send([{
         topic: KAFKA_OUTGOING_TOPIC,
-        messages: [JSON.stringify(req.data)],
+        messages: [JSON.stringify(crawldata)],
     }], function (err, data) {
-        //console.log(data);
+        console.log(data);
         var crawl = req.data;
         var exists = false;
         for (var ii = 0; ii < req.session.crawls.length; ii++) {
@@ -202,9 +206,8 @@ app.use('/', express.static(path.join(__dirname, 'static')));
 
 process.on('SIGINT', function () {
   app.locals.redis.quit();
-  consumer.close(true, function(){
-    client.close();
-  });
+  consumer.commit();
+  client.close();
 });
 
 // Connect

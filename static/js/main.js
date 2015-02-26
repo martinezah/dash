@@ -114,7 +114,8 @@ app.controller('crawler', ['$scope', '$timeout', function($scope, $timeout) {
             var depth = parseInt(crawl.depth);
             if (!depth) 
                 depth = 0;
-            crawl.depth = depth;
+            crawl.maxdepth = depth;
+            delete crawl.depth;
 
             crawl.appid = $scope.appid;            
             crawl.messages = [];
