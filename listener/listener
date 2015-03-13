@@ -13,32 +13,41 @@ from docopt import docopt
 REDIS_HOST = "localhost"
 KAFKA_HOST = "localhost"
 KAFKA_TOPIC = "crawled"
-CLIENT_GROUP = "dash-watcher"
+CLIENT_GROUP = "dash-listener"
+REDIS_TOPIC = "dash-messages"
 
 def watch(redis_host, kafka_host, topic, group):
     redis_conn = redis.Redis(redis_host)
     redis_conn.info()
 
     kafka_conn = KafkaClient(kafka_host)
-    kafka_conn.ensure_topic_exists(topic)
+    #kafka_conn.ensure_topic_exists(topic)
     consumer = SimpleConsumer(kafka_conn,
                               group,
                               topic,
                               auto_commit=True,
-                              iter_timeout=1.0)
+                              iter_timeout=1.0,
+                              max_buffer_size=None)
 
+    print "listening..."
     while True:
-          try:
+        try:
             for message in consumer.get_messages():
                 if message is None:
                     break
                 try:
                     d = json.loads(message.message.value)
-                    print json.dumps(d)
+                    if 'body' in d:
+                        del d['body']
+                    msg = json.dumps(d)
+                    redis_conn.publish(REDIS_TOPIC, msg)
+                    #sys.stderr.write('+')
+                    sys.stderr.write('{}:{}\n'.format(d['appid'],d['crawlid']))
                     
                 except ValueError:
-                    print "json failed to parse"
-          except OffsetOutOfRangeError:
+                    sys.stderr.write('-')
+                    pass
+        except OffsetOutOfRangeError:
             consumer.seek(0,0)
             time.sleep(1)
 

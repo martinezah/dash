@@ -11,6 +11,7 @@ var ZOOKEEPER_SERVER = process.env['ZOOKEEPER_SERVER'] || 'localhost';
 
 var REDIS_SERVER = process.env['REDIS_SERVER'] || 'localhost';
 var REDIS_PORT = parseInt(process.env['REDIS_PORT']) || 6379;
+var REDIS_TOPIC = parseInt(process.env['REDIS_TOPIC']) || 'dash-messages';
 
 var LOCAL_TTL = parseInt(process.env['LOCAL_TTL']) || (2 * 24 * 60 * 60);
 var OTHER_TTL = parseInt(process.env['OTHER_TTL']) || (2 * 60 * 60);
@@ -39,7 +40,26 @@ app.use(express.session({
 
 // Redis Client
 
-app.locals.redis = redis.createClient(REDIS_PORT, REDIS_SERVER);
+var publisher = redis.createClient(REDIS_PORT, REDIS_SERVER);
+
+var subscriber = redis.createClient(REDIS_PORT, REDIS_SERVER);
+subscriber.subscribe(REDIS_TOPIC)
+
+subscriber.on('message', function(channel, message) {
+    //console.log(channel, message);
+    try {
+        var is_local = message.appid == APP_ID;
+        var queue = message.appid + ":" + message.crawlid;
+        var msg = JSON.stringify(message);
+        //console.log(message.appid + ":" + message.crawlid + " " + message.url);
+        publisher.lpush(queue, msg);
+        publisher.ltrim(queue, 0, is_local ? LOCAL_QUEUE_SIZE : OTHER_QUEUE_SIZE);
+        publisher.expire(queue, is_local ? LOCAL_TTL : OTHER_TTL);
+        app.io.room(queue).broadcast('message', message);
+    } catch(err) {
+        console.log(err);
+    }
+});
 
 // Kafka Client
 
@@ -68,7 +88,8 @@ app.io.route('hello', function(req) {
     for (var ii = 0; ii < req.session.crawls.length; ii++) {
         try {
             var crawl = req.session.crawls[ii];
-            req.io.join(crawl.crawlid);    
+            var queue = crawl.appid + ":" + crawl.crawlid;
+            req.io.join(queue);    
             try {
                 if (!crawl.messages || !crawl.messages.length)
                     crawl.messages = [];
@@ -88,7 +109,7 @@ app.io.route('load', function(req) {
             var crawl = req.session.crawls[ii];
             try {
                 var queue = crawl.appid + ":" + crawl.crawlid;
-                var messages = app.locals.redis.lrange(queue, 0, -1, function(err, items) {
+                var messages = subscriber.lrange(queue, 0, -1, function(err, items) {
                     items.forEach(function (msg, i) {
                         var message = JSON.parse(msg);
                         req.io.emit('message', message);
@@ -101,17 +122,19 @@ app.io.route('load', function(req) {
 
 app.io.route('add', function(req) {
     var crawl = req.data;
+    console.log(crawl);
     var exists = false;
     for (var ii = 0; ii < req.session.crawls.length; ii++) {
         try {
-            if (req.session.crawls[ii].crawlid == crawl.crawlid)
+            if (req.session.crawls[ii].appid == crawl.appid && req.session.crawls[ii].crawlid == crawl.crawlid)
                 exists = true;
         } catch (err) { }
     }
     if (!exists) {
-        req.io.join(crawl.crawlid);
+        var queue = crawl.appid + ":" + crawl.crawlid;
+        req.io.join(queue);
         req.session.crawls.push(crawl);
-        app.locals.redis.subscribe(crawl.crawlid);
+        console.log("subscribed: " + queue);
     }
     req.session.save(function() {
         req.io.emit('add-ok', crawl);
@@ -120,18 +143,19 @@ app.io.route('add', function(req) {
 
 app.io.route('remove', function(req) {
     var crawlid = req.data.crawlid;
+    var appid = req.data.appid;
     for (var ii = 0; ii < req.session.crawls.length; ii++) {
         try {
-            if (req.session.crawls[ii].crawlid == crawlid) {
-                req.io.leave(crawlid);
-                app.locals.redis.unsubscribe(crawl.crawlid);
+            if (req.session.crawls[ii].appid == appid && req.session.crawls[ii].crawlid == crawlid) {
+                var queue = crawl.appid + ":" + crawl.crawlid;
+                req.io.leave(queue);
                 req.session.crawls.splice(ii,1);
                 break;
             }
         } catch (err) { }
     }
     req.session.save(function() {
-        req.io.emit('remove-ok', {crawlid:crawlid});
+        req.io.emit('remove-ok', {appid:appid, crawlid:crawlid});
     });
 });
 
@@ -147,16 +171,17 @@ app.io.route('crawl', function(req) {
         var crawl = req.data;
         var exists = false;
         for (var ii = 0; ii < req.session.crawls.length; ii++) {
-            if (req.session.crawls[ii].crawlid == crawl.crawlid)
+            if (req.session.crawls[ii].appid == crawl.appid && req.session.crawls[ii].crawlid == crawl.crawlid)
                 exists = true;
         }
         if (!exists) {
-            req.io.join(crawl.crawlid);
+            var queue = crawl.appid + ":" + crawl.crawlid;
+            req.io.join(queue);
             req.session.crawls.push(crawl);
-            app.locals.redis.subscribe(crawl.crawlid);
+            console.log("subscribed: " + queue);
         }
         req.session.save(function() {
-            req.io.emit('crawl-ok', crawl);
+            req.io.emit('crawl-ok', queue);
         });
     });
 });
@@ -168,7 +193,7 @@ app.io.route('goodbye', function(req) {
 
 // Redis Listener
 
-app.locals.redis.on('message', function(channel, message) {
+subscriber.on('message', function(channel, message) {
     console.log('redis message: ' + channel + ' ' + message)
     app.io.room(channel).broadcast('message', message);
 });
@@ -181,8 +206,8 @@ app.use('/', express.static(path.join(__dirname, 'static')));
 // Shutdown Cleanup
 
 process.on('SIGINT', function () {
-  app.locals.redis.quit();
-  consumer.commit();
+  subscriber.quit();
+  publisher.quit();
   client.close();
 });
 
